@@ -1,59 +1,97 @@
 import React from 'react';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Link, Tabs } from 'expo-router';
-import { Pressable } from 'react-native';
-
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
-
-// You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
-function TabBarIcon(props: {
-  name: React.ComponentProps<typeof FontAwesome>['name'];
-  color: string;
-}) {
-  return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
-}
+import { Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { View, StyleSheet, Platform } from 'react-native';
+import { colors, typography } from '../../utils/theme';
+import { FAB } from '../../components/ui/FAB';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Tab One',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable>
-                {({ pressed }) => (
-                  <FontAwesome
-                    name="info-circle"
-                    size={25}
-                    color={Colors[colorScheme ?? 'light'].text}
-                    style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
+    <View style={styles.container}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: styles.tabBar,
+          tabBarActiveTintColor: colors.accent,
+          tabBarInactiveTintColor: colors.text.tertiary,
+          tabBarLabelStyle: styles.tabBarLabel,
+          tabBarItemStyle: styles.tabBarItem,
         }}
-      />
-      <Tabs.Screen
-        name="two"
-        options={{
-          title: 'Tab Two',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="home" size={22} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="subscriptions"
+          options={{
+            title: 'Subs',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="card" size={22} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="reminders"
+          options={{
+            title: 'Remind',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="notifications" size={22} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="vault"
+          options={{
+            title: 'Vault',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="folder" size={22} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="person" size={22} color={color} />
+            ),
+          }}
+        />
+      </Tabs>
+      <FAB />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.bg.primary,
+  },
+  tabBar: {
+    backgroundColor: colors.bg.card,
+    borderTopWidth: 0,
+    height: Platform.OS === 'web' ? 70 : 85,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'web' ? 10 : 25,
+    elevation: 20,
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+  },
+  tabBarLabel: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  tabBarItem: {
+    gap: 2,
+  },
+});
