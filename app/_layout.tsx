@@ -6,7 +6,7 @@ if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer;
 }
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +20,7 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { AppProvider, useApp } from '../context/AppContext';
 import { colors } from '../utils/theme';
+import { LockScreen } from '../components/features/LockScreen';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -28,6 +29,7 @@ function RootLayoutNav() {
   const { state } = useApp();
   const segments = useSegments();
   const router = useRouter();
+  const [isLocked, setIsLocked] = useState(true);
 
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -45,16 +47,15 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!state.isLoaded) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
-
+    // Tarsi-style: No mandatory account. 
+    // We only redirect to Welcome if onboarding isn't done.
     if (!state.hasCompletedOnboarding && !segments.includes('welcome')) {
       router.replace('/(auth)/welcome');
-    } else if (state.hasCompletedOnboarding && !state.isAuthenticated && !inAuthGroup) {
-      router.replace('/(auth)/login');
-    } else if (state.isAuthenticated && inAuthGroup) {
+    } else if (state.hasCompletedOnboarding && segments[0] === '(auth)' && segments[1] !== 'welcome') {
+      // If they are on Login/Signup but already onboarded, send to Dashboard
       router.replace('/(tabs)');
     }
-  }, [state.isAuthenticated, state.hasCompletedOnboarding, state.isLoaded, segments]);
+  }, [state.hasCompletedOnboarding, state.isLoaded, segments]);
 
   if (!fontsLoaded || !state.isLoaded) {
     return (
@@ -62,6 +63,11 @@ function RootLayoutNav() {
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
+  }
+
+  // Biometric Lock logic
+  if (state.biometricsEnabled && isLocked && state.hasCompletedOnboarding) {
+    return <LockScreen onUnlock={() => setIsLocked(false)} />;
   }
 
   return (

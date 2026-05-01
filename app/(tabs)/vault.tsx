@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Alert, Platform } from 'react-native';
+import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../context/AppContext';
 import { DocumentRow } from '../../components/features/DocumentRow';
@@ -32,6 +33,15 @@ export default function Vault() {
     state.documents.forEach(d => { c[d.category] = (c[d.category] || 0) + 1; });
     return c;
   }, [state.documents]);
+
+  const handleOpenDocument = async (uri: string) => {
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await Sharing.shareAsync(uri);
+    } else {
+      Alert.alert('Error', 'Sharing is not available on this device');
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -84,7 +94,10 @@ export default function Vault() {
           {filtered.length > 0 ? (
             <Card style={styles.listCard}>
               {filtered.map(doc => (
-                <DocumentRow key={doc.id} document={doc}
+                <DocumentRow 
+                  key={doc.id} 
+                  document={doc}
+                  onPress={() => handleOpenDocument(doc.fileUri)}
                   onDelete={(id) => Alert.alert('Delete?', 'Remove this document?', [
                     { text: 'Cancel', style: 'cancel' },
                     { text: 'Delete', style: 'destructive', onPress: () => dispatch({ type: 'DELETE_DOCUMENT', payload: id }) },

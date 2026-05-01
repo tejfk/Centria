@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView, Alert, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
@@ -28,14 +28,22 @@ export default function Settings() {
       </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>General</Text>
+          <Text style={styles.sectionTitle}>Security</Text>
           <Card style={styles.listCard}>
             <View style={styles.row}>
-              <Text style={styles.label}>Currency</Text>
-              <Text style={styles.value}>PHP (₱)</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Biometric Lock</Text>
+                <Text style={styles.subLabel}>Require FaceID or Fingerprint</Text>
+              </View>
+              <Switch 
+                value={state.biometricsEnabled} 
+                onValueChange={(val) => dispatch({ type: 'SET_BIOMETRICS', payload: val })}
+                trackColor={{ false: colors.border, true: colors.accent }}
+              />
             </View>
           </Card>
         </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Data Management</Text>
           <Card style={styles.listCard}>
@@ -71,5 +79,6 @@ const styles = StyleSheet.create({
   listCard: { padding: 0, overflow: 'hidden' },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: spacing.md },
   label: { ...typography.body, color: colors.text.primary },
+  subLabel: { ...typography.caption, color: colors.text.tertiary },
   value: { ...typography.body, color: colors.text.tertiary },
 });

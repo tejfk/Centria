@@ -62,6 +62,7 @@ export interface AppState {
   isLoaded: boolean;
   isAuthenticated: boolean;
   hasCompletedOnboarding: boolean;
+  biometricsEnabled: boolean;
 }
 
 const initialState: AppState = {
@@ -73,6 +74,7 @@ const initialState: AppState = {
   isLoaded: false,
   isAuthenticated: false,
   hasCompletedOnboarding: false,
+  biometricsEnabled: false,
 };
 
 // ─── Actions ─────────────────────────────────
@@ -84,6 +86,7 @@ type Action =
   | { type: 'COMPLETE_ONBOARDING' }
   | { type: 'LOGIN' }
   | { type: 'LOGOUT' }
+  | { type: 'SET_BIOMETRICS'; payload: boolean }
   | { type: 'CLEAR_ALL_DATA' };
 
 // ─── Reducer ─────────────────────────────────
@@ -102,6 +105,8 @@ function appReducer(state: AppState, action: Action): AppState {
       return { ...initialState, isLoaded: true, hasCompletedOnboarding: state.hasCompletedOnboarding };
     case 'SET_PROFILE':
       return { ...state, profile: { ...state.profile, ...action.payload } };
+    case 'SET_BIOMETRICS':
+      return { ...state, biometricsEnabled: action.payload };
     case 'CLEAR_ALL_DATA':
       return { ...initialState, isLoaded: true, hasCompletedOnboarding: state.hasCompletedOnboarding };
     default:
@@ -129,6 +134,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'COMPLETE_ONBOARDING' });
       }
       
+      const bioEnabled = await AsyncStorage.getItem('@centria_biometrics');
+      if (bioEnabled === 'true') {
+        dispatch({ type: 'SET_BIOMETRICS', payload: true });
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         dispatch({ type: 'LOGIN' });
@@ -156,7 +166,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // 3. Real-Time Data Watcher (Offline-First Magic)
   // Instead of manual fetches, we WATCH the local SQLite database for changes
   useEffect(() => {
-    if (!state.isAuthenticated) return;
+    // Tarsi-style: Watchers run for every local user immediately.
+    // if (!state.isAuthenticated) return; // REMOVED
 
     // Watch Expenses
     const expenseSub = db.watch('SELECT * FROM expenses ORDER BY date DESC', [], {
@@ -168,14 +179,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Watch Subscriptions
     const subSub = db.watch('SELECT * FROM subscriptions', [], {
       onResult: (result) => {
-        dispatch({ type: 'SET_DATA', payload: { subscriptions: result.rows._array } });
+        const mapped = result.rows._array.map((s: any) => ({
+          ...s,
+          nextBillingDate: s.next_billing_date
+        }));
+        dispatch({ type: 'SET_DATA', payload: { subscriptions: mapped } });
       },
     });
 
     // Watch Reminders
     const reminderSub = db.watch('SELECT * FROM reminders', [], {
       onResult: (result) => {
-        dispatch({ type: 'SET_DATA', payload: { reminders: result.rows._array } });
+        const mapped = result.rows._array.map((r: any) => ({
+          ...r,
+          linkedSubscriptionId: r.linked_subscription_id,
+          completed: !!r.completed
+        }));
+        dispatch({ type: 'SET_DATA', payload: { reminders: mapped } });
+      },
+    });
+
+    // Watch Documents
+    const docSub = db.watch('SELECT * FROM documents', [], {
+      onResult: (result) => {
+        const mapped = result.rows._array.map((d: any) => ({
+          ...d,
+          fileUri: d.file_path,
+          fileType: d.file_type,
+          expiryDate: d.expiry_date
+        }));
+        dispatch({ type: 'SET_DATA', payload: { documents: mapped } });
       },
     });
 
@@ -198,15 +231,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       expenseSub?.close();
       subSub?.close();
       reminderSub?.close();
+      docSub?.close();
       profileSub?.close();
     };
-  }, [state.isAuthenticated]);
+  }, []); // Run forever locally
 
   useEffect(() => {
     if (state.hasCompletedOnboarding) {
       AsyncStorage.setItem('@centria_onboarded', 'true');
     }
   }, [state.hasCompletedOnboarding]);
+
+  useEffect(() => {
+    AsyncStorage.setItem('@centria_biometrics', state.biometricsEnabled.toString());
+  }, [state.biometricsEnabled]);
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>

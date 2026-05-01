@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, radius } from '../../utils/theme';
 import { formatDate } from '../../utils/formatters';
 import { getCategoryIcon, getCategoryLabel } from '../../utils/helpers';
@@ -29,6 +30,7 @@ export function DocumentRow({ document, onPress, onDelete }: DocumentRowProps) {
           {document.expiryDate ? ` · Exp. ${formatDate(document.expiryDate)}` : ''}
         </Text>
       </View>
+      <Ionicons name="open-outline" size={20} color={colors.text.tertiary} />
     </TouchableOpacity>
   );
 }
