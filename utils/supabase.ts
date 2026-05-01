@@ -1,6 +1,6 @@
-import 'react-native-url-polyfill/auto';
-import * as SecureStore from 'expo-secure-store';
 import { createClient } from '@supabase/supabase-js';
+import * as SecureStore from 'expo-secure-store';
+import 'react-native-url-polyfill/auto';
 
 // Custom storage adapter for Expo SecureStore
 const ExpoSecureStoreAdapter = {
@@ -26,24 +26,3 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 });
-
-/**
- * Uploads a file to Supabase Storage
- * @param bucket Bucket name
- * @param path Remote path inside the bucket
- * @param base64 Base64 string of the file
- * @param contentType MIME type of the file
- */
-import { decode } from 'base64-arraybuffer';
-
-export const uploadFile = async (bucket: string, path: string, base64: string, contentType: string) => {
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .upload(path, decode(base64), {
-      contentType,
-      upsert: true
-    });
-  
-  if (error) throw error;
-  return data;
-};

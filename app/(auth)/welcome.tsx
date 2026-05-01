@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, SafeAreaView, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../context/AppContext';
 import { colors, typography, spacing, radius } from '../../utils/theme';
 import { Button } from '../../components/ui/Button';
@@ -10,21 +11,28 @@ const { width } = Dimensions.get('window');
 const slides = [
   {
     id: '1',
-    title: 'Financial Intelligence',
-    description: 'Track every peso with our clean, automated daily snapshot system.',
-    icon: '💰',
+    title: 'Mindful Finance',
+    description: 'Track your spending with a clean, royal-blue interface designed for focus and clarity.',
+    icon: 'wallet-outline',
   },
   {
     id: '2',
-    title: 'Subscription Control',
-    description: 'Never pay for a forgotten trial again. Manage everything in one place.',
-    icon: '📋',
+    title: 'Local Privacy',
+    description: 'Centria is account-free. Your financial data lives on your device, not in the cloud.',
+    icon: 'shield-checkmark-outline',
   },
   {
     id: '3',
-    title: 'Secure Vault',
-    description: 'Store your IDs, receipts, and contracts in a highly secure, offline vault.',
-    icon: '🔒',
+    title: 'Private Vault',
+    description: 'Store your sensitive documents securely in an offline folder protected by your device.',
+    icon: 'lock-closed-outline',
+  },
+  {
+    id: '4',
+    title: 'Terms & Policy',
+    description: 'By tapping "Start My Journey", you agree to our Terms of Service and Offline-First Privacy Policy.',
+    icon: 'document-text-outline',
+    isFinal: true,
   },
 ];
 
@@ -42,7 +50,7 @@ export default function Welcome() {
 
   const handleComplete = () => {
     dispatch({ type: 'COMPLETE_ONBOARDING' });
-    router.push('/login');
+    router.replace('/(tabs)');
   };
 
   const nextSlide = () => {
@@ -69,10 +77,22 @@ export default function Welcome() {
         {slides.map((slide) => (
           <View key={slide.id} style={styles.slide}>
             <View style={styles.iconContainer}>
-              <Text style={styles.icon}>{slide.icon}</Text>
+              <Ionicons name={slide.icon as any} size={60} color={colors.white} />
             </View>
             <Text style={styles.title}>{slide.title}</Text>
             <Text style={styles.description}>{slide.description}</Text>
+            
+            {slide.isFinal && (
+              <View style={styles.legalLinks}>
+                <TouchableOpacity onPress={() => Alert.alert('Privacy Policy', 'Centria collects zero personal data. All information stays local.')}>
+                  <Text style={styles.legalLinkText}>Privacy Policy</Text>
+                </TouchableOpacity>
+                <Text style={styles.legalDot}>•</Text>
+                <TouchableOpacity onPress={() => Alert.alert('Terms', 'Usage of this app is at your own risk. Data backups are your responsibility.')}>
+                  <Text style={styles.legalLinkText}>Terms of Service</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         ))}
       </ScrollView>
@@ -96,10 +116,20 @@ export default function Welcome() {
               <TouchableOpacity onPress={handleComplete}>
                 <Text style={styles.skipText}>Skip</Text>
               </TouchableOpacity>
-              <Button title="Next" onPress={nextSlide} style={styles.nextButton} />
+              <Button 
+                title="Next" 
+                onPress={nextSlide} 
+                style={styles.nextButton} 
+                textStyle={{ color: colors.bg.header }} 
+              />
             </>
           ) : (
-            <Button title="Get Started" onPress={handleComplete} style={styles.getStartedButton} />
+            <Button 
+              title="Start My Journey" 
+              onPress={handleComplete} 
+              style={styles.getStartedButton} 
+              textStyle={{ color: colors.bg.header }}
+            />
           )}
         </View>
       </View>
@@ -110,7 +140,7 @@ export default function Welcome() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bg.header, // Royal Blue theme for onboarding
+    backgroundColor: colors.bg.header,
   },
   headerSpacer: {
     height: Platform.OS === 'ios' ? 100 : 60,
@@ -133,9 +163,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 40,
   },
-  icon: {
-    fontSize: 60,
-  },
   title: {
     ...typography.display,
     color: colors.white,
@@ -149,6 +176,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     fontSize: 16,
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 30,
+    gap: 10,
+  },
+  legalLinkText: {
+    ...typography.caption,
+    color: colors.white,
+    textDecorationLine: 'underline',
+    opacity: 0.8,
+  },
+  legalDot: {
+    color: colors.white,
+    opacity: 0.5,
   },
   footer: {
     paddingBottom: 60,

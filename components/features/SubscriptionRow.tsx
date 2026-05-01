@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, typography, spacing, radius } from '../../utils/theme';
 import { formatCurrency, getDaysUntil, formatDate } from '../../utils/formatters';
 import { getUrgencyColor } from '../../utils/helpers';
-import { Subscription } from '../../context/AppContext';
+import { Subscription, useApp } from '../../context/AppContext';
 
 interface SubscriptionRowProps {
   subscription: Subscription;
@@ -12,6 +12,7 @@ interface SubscriptionRowProps {
 }
 
 export function SubscriptionRow({ subscription, onDelete, onPress }: SubscriptionRowProps) {
+  const { state } = useApp();
   const daysUntil = getDaysUntil(subscription.nextBillingDate);
   const urgencyColor = getUrgencyColor(daysUntil);
   const cycleLabel = subscription.cycle.charAt(0).toUpperCase() + subscription.cycle.slice(1);
@@ -37,7 +38,7 @@ export function SubscriptionRow({ subscription, onDelete, onPress }: Subscriptio
           </Text>
         </View>
       </View>
-      <Text style={styles.price}>{formatCurrency(subscription.price)}</Text>
+      <Text style={styles.price}>{formatCurrency(subscription.price, state.profile.currency)}</Text>
     </TouchableOpacity>
   );
 }

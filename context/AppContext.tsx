@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { db, connector } from '../utils/powersync';
 import { supabase } from '../utils/supabase';
 import { 
@@ -63,10 +64,16 @@ export interface AppState {
   isAuthenticated: boolean;
   hasCompletedOnboarding: boolean;
   biometricsEnabled: boolean;
+  appPin: string | null;
 }
 
 const initialState: AppState = {
-  profile: sampleProfile,
+  profile: {
+    name: 'User',
+    currency: '₱',
+    monthlyIncome: 0,
+    createdAt: new Date().toISOString(),
+  },
   expenses: [],
   subscriptions: [],
   documents: [],
@@ -75,6 +82,7 @@ const initialState: AppState = {
   isAuthenticated: false,
   hasCompletedOnboarding: false,
   biometricsEnabled: false,
+  appPin: null,
 };
 
 // ─── Actions ─────────────────────────────────
@@ -87,6 +95,7 @@ type Action =
   | { type: 'LOGIN' }
   | { type: 'LOGOUT' }
   | { type: 'SET_BIOMETRICS'; payload: boolean }
+  | { type: 'SET_PIN'; payload: string | null }
   | { type: 'CLEAR_ALL_DATA' };
 
 // ─── Reducer ─────────────────────────────────
@@ -107,8 +116,24 @@ function appReducer(state: AppState, action: Action): AppState {
       return { ...state, profile: { ...state.profile, ...action.payload } };
     case 'SET_BIOMETRICS':
       return { ...state, biometricsEnabled: action.payload };
+    case 'SET_PIN':
+      return { ...state, appPin: action.payload };
     case 'CLEAR_ALL_DATA':
-      return { ...initialState, isLoaded: true, hasCompletedOnboarding: state.hasCompletedOnboarding };
+      AsyncStorage.removeItem('@centria_onboarded');
+      SecureStore.deleteItemAsync('centria_biometrics');
+      SecureStore.deleteItemAsync('centria_pin');
+      return { 
+        ...initialState, 
+        isLoaded: true, 
+        hasCompletedOnboarding: false,
+        isAuthenticated: false,
+        profile: {
+          name: 'User',
+          currency: '₱',
+          monthlyIncome: 0,
+          createdAt: new Date().toISOString()
+        }
+      };
     default:
       return state;
   }
@@ -127,22 +152,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // 1. Initial Load & PowerSync Initialization
   useEffect(() => {
     (async () => {
-      await db.init();
+      if (db) {
+        await db.init();
+      }
       
-      const onboarded = await AsyncStorage.getItem('@centria_onboarded');
+      const [onboarded, bioEnabled, savedPin] = await Promise.all([
+        AsyncStorage.getItem('@centria_onboarded'), // Keeping this in AsyncStorage for now as it's not sensitive
+        SecureStore.getItemAsync('centria_biometrics'),
+        SecureStore.getItemAsync('centria_pin'),
+      ]);
+
       if (onboarded === 'true') {
         dispatch({ type: 'COMPLETE_ONBOARDING' });
       }
-      
-      const bioEnabled = await AsyncStorage.getItem('@centria_biometrics');
       if (bioEnabled === 'true') {
         dispatch({ type: 'SET_BIOMETRICS', payload: true });
+      }
+      if (savedPin) {
+        dispatch({ type: 'SET_PIN', payload: savedPin });
       }
 
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         dispatch({ type: 'LOGIN' });
-        db.connect(connector).catch(console.error);
+        if (db) {
+          db.connect(connector).catch(console.error);
+        }
       }
       
       dispatch({ type: 'LOAD_STATE', payload: {} });
@@ -154,10 +189,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         dispatch({ type: 'LOGIN' });
-        db.connect(connector).catch(console.error);
+        if (db) {
+          db.connect(connector).catch(console.error);
+        }
       } else if (event === 'SIGNED_OUT') {
         dispatch({ type: 'LOGOUT' });
-        db.disconnectAndClear().catch(console.error);
+        if (db) {
+          db.disconnectAndClear().catch(console.error);
+        }
       }
     });
     return () => subscription.unsubscribe();
@@ -168,47 +207,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Tarsi-style: Watchers run for every local user immediately.
     // if (!state.isAuthenticated) return; // REMOVED
+    if (!db) return;
 
     // Watch Expenses
     const expenseSub = db.watch('SELECT * FROM expenses ORDER BY date DESC', [], {
       onResult: (result) => {
-        dispatch({ type: 'SET_DATA', payload: { expenses: result.rows._array } });
+        const rows = [];
+        for (let i = 0; i < result.rows.length; i++) {
+          rows.push(result.rows.item(i));
+        }
+        dispatch({ type: 'SET_DATA', payload: { expenses: rows } });
       },
     });
 
     // Watch Subscriptions
     const subSub = db.watch('SELECT * FROM subscriptions', [], {
       onResult: (result) => {
-        const mapped = result.rows._array.map((s: any) => ({
-          ...s,
-          nextBillingDate: s.next_billing_date
-        }));
-        dispatch({ type: 'SET_DATA', payload: { subscriptions: mapped } });
+        const rows = [];
+        for (let i = 0; i < result.rows.length; i++) {
+          const s = result.rows.item(i);
+          rows.push({
+            ...s,
+            nextBillingDate: s.next_billing_date
+          });
+        }
+        dispatch({ type: 'SET_DATA', payload: { subscriptions: rows } });
       },
     });
 
     // Watch Reminders
     const reminderSub = db.watch('SELECT * FROM reminders', [], {
       onResult: (result) => {
-        const mapped = result.rows._array.map((r: any) => ({
-          ...r,
-          linkedSubscriptionId: r.linked_subscription_id,
-          completed: !!r.completed
-        }));
-        dispatch({ type: 'SET_DATA', payload: { reminders: mapped } });
+        const rows = [];
+        for (let i = 0; i < result.rows.length; i++) {
+          const r = result.rows.item(i);
+          rows.push({
+            ...r,
+            linkedSubscriptionId: r.linked_subscription_id,
+            completed: !!r.completed
+          });
+        }
+        dispatch({ type: 'SET_DATA', payload: { reminders: rows } });
       },
     });
 
     // Watch Documents
     const docSub = db.watch('SELECT * FROM documents', [], {
       onResult: (result) => {
-        const mapped = result.rows._array.map((d: any) => ({
-          ...d,
-          fileUri: d.file_path,
-          fileType: d.file_type,
-          expiryDate: d.expiry_date
-        }));
-        dispatch({ type: 'SET_DATA', payload: { documents: mapped } });
+        const rows = [];
+        for (let i = 0; i < result.rows.length; i++) {
+          const d = result.rows.item(i);
+          rows.push({
+            ...d,
+            fileUri: d.file_path,
+            fileType: d.file_type,
+            expiryDate: d.expiry_date
+          });
+        }
+        dispatch({ type: 'SET_DATA', payload: { documents: rows } });
       },
     });
 
@@ -237,17 +293,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []); // Run forever locally
 
   useEffect(() => {
+    if (!state.isLoaded) return;
     if (state.hasCompletedOnboarding) {
       AsyncStorage.setItem('@centria_onboarded', 'true');
     }
-  }, [state.hasCompletedOnboarding]);
+  }, [state.hasCompletedOnboarding, state.isLoaded]);
 
   useEffect(() => {
-    AsyncStorage.setItem('@centria_biometrics', state.biometricsEnabled.toString());
-  }, [state.biometricsEnabled]);
+    if (!state.isLoaded) return;
+    SecureStore.setItemAsync('centria_biometrics', state.biometricsEnabled.toString());
+  }, [state.biometricsEnabled, state.isLoaded]);
+
+  useEffect(() => {
+    if (!state.isLoaded) return;
+    if (state.appPin) {
+      SecureStore.setItemAsync('centria_pin', state.appPin);
+    } else {
+      SecureStore.deleteItemAsync('centria_pin');
+    }
+  }, [state.appPin, state.isLoaded]);
 
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
+    <AppContext.Provider value={{ state, dispatch, db }}>
       {children}
     </AppContext.Provider>
   );

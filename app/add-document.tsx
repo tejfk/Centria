@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useApp } from '../context/AppContext';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
@@ -28,21 +28,41 @@ export default function AddDocument() {
   const [loading, setLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<{ uri: string; name: string; type: string } | null>(null);
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
+  console.log('Centria AddDoc State:', { hasName: !!name, hasFile: !!selectedFile, fileUri: selectedFile?.uri });
 
-    if (!result.canceled) {
-      const asset = result.assets[0];
-      setSelectedFile({
-        uri: asset.uri,
-        name: asset.fileName || `image_${Date.now()}.jpg`,
-        type: 'image/jpeg',
+  const pickImage = async () => {
+    try {
+      (global as any).isPickingFile = true;
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
       });
-      if (!name) setName(asset.fileName?.split('.')[0] || 'New Image');
+
+      if (!result.canceled) {
+        const asset = result.assets[0];
+        
+        // Limit image size to 5MB
+        const info = await FileSystem.getInfoAsync(asset.uri);
+        if (info.exists && info.size && info.size > 5 * 1024 * 1024) {
+          Alert.alert('File too large', 'Please select an image smaller than 5MB to save space.');
+          return;
+        }
+
+        setSelectedFile({
+          uri: asset.uri,
+          name: asset.fileName || `image_${Date.now()}.jpg`,
+          type: 'image/jpeg',
+        });
+        const defaultName = asset.fileName || `Image_${Date.now()}`;
+        if (!name) setName(defaultName.split('.')[0]);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setTimeout(() => {
+        (global as any).isPickingFile = false;
+      }, 1000);
     }
   };
 
@@ -53,6 +73,13 @@ export default function AddDocument() {
 
     if (!result.canceled) {
       const asset = result.assets[0];
+
+      // Limit document size to 5MB
+      if (asset.size && asset.size > 5 * 1024 * 1024) {
+        Alert.alert('File too large', 'Please select a file smaller than 5MB.');
+        return;
+      }
+
       setSelectedFile({
         uri: asset.uri,
         name: asset.name,
@@ -63,37 +90,59 @@ export default function AddDocument() {
   };
 
   const handleSave = async () => {
-    if (!name.trim() || !selectedFile) return;
+    if (!name.trim() || !selectedFile) {
+      console.log('Centria Vault: Cannot save - missing name or file', { name, hasFile: !!selectedFile });
+      return;
+    }
 
+    console.log('Centria Vault: Starting save process...', { name, category, uri: selectedFile.uri });
     setLoading(true);
     try {
       // 1. Create a permanent directory for Centria Vault
       const vaultDir = `${FileSystem.documentDirectory}vault/`;
       const dirInfo = await FileSystem.getInfoAsync(vaultDir);
+      console.log('Centria Vault: Directory check:', dirInfo);
+      
       if (!dirInfo.exists) {
+        console.log('Centria Vault: Creating vault directory...');
         await FileSystem.makeDirectoryAsync(vaultDir, { intermediates: true });
       }
 
-      // 2. Copy the file to the local vault folder
-      const fileName = `${Date.now()}_${selectedFile.name}`;
-      const localPath = `${vaultDir}${fileName}`;
+      // 2. Copy/Download the file to the local vault folder
+      const fileName = `${Date.now()}_${selectedFile.name.replace(/\s+/g, '_')}`;
+      const localPath = vaultDir + fileName;
+      console.log('Centria Vault: Destination path:', localPath);
       
-      await FileSystem.copyAsync({
-        from: selectedFile.uri,
-        to: localPath,
-      });
+      if (selectedFile.uri.startsWith('http')) {
+        console.log('Centria Vault: Downloading remote test file...');
+        await FileSystem.downloadAsync(selectedFile.uri, localPath);
+      } else {
+        console.log('Centria Vault: Copying local file...');
+        await FileSystem.copyAsync({
+          from: selectedFile.uri,
+          to: localPath,
+        });
+      }
+      console.log('Centria Vault: File storage successful.');
 
-      // 3. Save metadata to PowerSync (Centria Offline DB)
+      // 3. Save metadata to Sovereign DB
       const docId = generateId();
+      console.log('Centria Vault: Executing DB insert...', { docId, localPath });
+      
+      const { db } = require('../utils/powersync');
+      if (!db) throw new Error('Database (db) is null or undefined!');
+
       await db.execute(
         'INSERT INTO documents (id, user_id, name, category, file_path, file_type, expiry_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [docId, 'local-user', name.trim(), category, localPath, selectedFile.type, null]
       );
 
+      console.log('Centria Vault: Database insert successful.');
+      Alert.alert('Success', 'Document saved to Vault.');
       router.back();
     } catch (error: any) {
-      console.error('Storage Error:', error);
-      Alert.alert('Save Failed', 'There was an error saving your document to local storage.');
+      console.error('Centria Vault SAVE ERROR:', error);
+      Alert.alert('Save Failed', `Technical Error: ${error.message || error.toString()}`);
     } finally {
       setLoading(false);
     }
@@ -144,6 +193,15 @@ export default function AddDocument() {
               <TouchableOpacity style={[styles.uploadArea, { flex: 1 }]} onPress={pickDocument} activeOpacity={0.6}>
                 <Ionicons name="document-attach-outline" size={28} color={colors.text.tertiary} />
                 <Text style={styles.uploadText}>File</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.uploadArea, { flex: 1, backgroundColor: colors.accent + '20' }]} 
+                onPress={() => {
+                  setSelectedFile({ uri: 'https://via.placeholder.com/150', name: 'test_file.png', type: 'image/png' });
+                  setName('Test Vault Doc');
+                }}
+              >
+                <Ionicons name="flask-outline" size={28} color={colors.accent} />
+                <Text style={[styles.uploadText, { color: colors.accent }]}>Test File</Text>
               </TouchableOpacity>
             </View>
           )}

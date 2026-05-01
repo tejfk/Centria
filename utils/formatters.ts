@@ -1,20 +1,20 @@
 // Currency and date formatting utilities
 
-export function formatCurrency(amount: number): string {
-  return '₱' + amount.toLocaleString('en-PH', {
+export function formatCurrency(amount: number, symbol: string = '₱'): string {
+  return symbol + amount.toLocaleString('en-PH', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
-export function formatCurrencyShort(amount: number): string {
+export function formatCurrencyShort(amount: number, symbol: string = '₱'): string {
   if (amount >= 1000000) {
-    return '₱' + (amount / 1000000).toFixed(1) + 'M';
+    return symbol + (amount / 1000000).toFixed(1) + 'M';
   }
   if (amount >= 1000) {
-    return '₱' + (amount / 1000).toFixed(1) + 'K';
+    return symbol + (amount / 1000).toFixed(1) + 'K';
   }
-  return formatCurrency(amount);
+  return formatCurrency(amount, symbol);
 }
 
 export function formatDate(dateString: string): string {

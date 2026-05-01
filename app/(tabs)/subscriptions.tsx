@@ -55,7 +55,7 @@ export default function Subscriptions() {
           {/* Summary */}
           <Card style={styles.summaryCard} elevated>
             <Text style={styles.summaryLabel}>Total Monthly Cost</Text>
-            <Text style={styles.summaryAmount}>{formatCurrency(totalMonthly)}</Text>
+            <Text style={styles.summaryAmount}>{formatCurrency(totalMonthly, state.profile.currency)}</Text>
             <Text style={styles.summaryMeta}>
               {activeSubscriptions.length} active subscription{activeSubscriptions.length !== 1 ? 's' : ''}
             </Text>

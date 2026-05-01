@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { colors, typography, spacing, radius } from '../../utils/theme';
 import { formatCurrency, formatDate, getDaysUntil } from '../../utils/formatters';
 import { getUrgencyColor } from '../../utils/helpers';
+import { useApp } from '../../context/AppContext';
 
 interface UpcomingRowProps {
   icon: string;
@@ -12,6 +13,7 @@ interface UpcomingRowProps {
 }
 
 export function UpcomingRow({ icon, title, date, amount }: UpcomingRowProps) {
+  const { state } = useApp();
   const daysUntil = getDaysUntil(date);
   const urgencyColor = getUrgencyColor(daysUntil);
 
@@ -22,7 +24,7 @@ export function UpcomingRow({ icon, title, date, amount }: UpcomingRowProps) {
       <Text style={styles.title} numberOfLines={1}>{title}</Text>
       <Text style={styles.date}>{formatDate(date)}</Text>
       {amount != null && (
-        <Text style={styles.amount}>{formatCurrency(amount)}</Text>
+        <Text style={styles.amount}>{formatCurrency(amount, state.profile.currency)}</Text>
       )}
     </View>
   );

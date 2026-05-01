@@ -6,10 +6,9 @@ import { useApp } from '../context/AppContext';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { colors, typography, spacing, radius } from '../utils/theme';
-import { supabase } from '../utils/supabase';
 
 export default function EditIncome() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, db } = useApp();
   const router = useRouter();
   const [income, setIncome] = useState(state.profile.monthlyIncome.toString());
   const [loading, setLoading] = useState(false);
@@ -19,14 +18,17 @@ export default function EditIncome() {
     if (isNaN(parsedIncome)) return;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      // Offline-first architecture: bypassing cloud auth
+      const userId = 'local-user';
 
+      // Ensure we only ever have ONE profile row by deleting all and inserting fresh
+      await db.execute('DELETE FROM profiles');
       await db.execute(
-        'INSERT INTO profiles (id, name, monthly_income, currency, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET monthly_income = EXCLUDED.monthly_income',
-        [user.id, state.profile.name, parsedIncome, state.profile.currency, state.profile.createdAt]
+        'INSERT INTO profiles (id, name, monthly_income, currency, created_at) VALUES (?, ?, ?, ?, ?)',
+        [userId, state.profile.name, parsedIncome, state.profile.currency, state.profile.createdAt]
       );
 
+      dispatch({ type: 'SET_PROFILE', payload: { monthlyIncome: parsedIncome } });
       router.back();
     } catch (error: any) {
       alert(error.message);

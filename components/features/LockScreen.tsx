@@ -8,11 +8,18 @@ interface LockScreenProps {
   onUnlock: () => void;
 }
 
+import { useApp } from '../../context/AppContext';
+import { PinPad } from '../../components/ui/PinPad';
+
 export function LockScreen({ onUnlock }: LockScreenProps) {
+  const { state } = useApp();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPinPad, setShowPinPad] = useState(!state.biometricsEnabled);
 
   const authenticate = async () => {
+    if (showPinPad) return;
+    
     try {
       setIsAuthenticating(true);
       setError(null);
@@ -21,8 +28,7 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
       if (!hasHardware || !isEnrolled) {
-        // If no biometrics, just unlock (or we could fallback to PIN if implemented)
-        onUnlock();
+        setShowPinPad(true);
         return;
       }
 
@@ -39,13 +45,25 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
       }
     } catch (e) {
       setError('An error occurred');
+      setShowPinPad(true);
     } finally {
       setIsAuthenticating(false);
     }
   };
 
+  const handlePinComplete = (pin: string) => {
+    if (pin === state.appPin) {
+      onUnlock();
+    } else {
+      setError('Incorrect PIN');
+      // PinPad will clear itself on error prop change
+    }
+  };
+
   useEffect(() => {
-    authenticate();
+    if (state.biometricsEnabled) {
+      authenticate();
+    }
   }, []);
 
   return (
@@ -56,21 +74,40 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
             <Ionicons name="lock-closed" size={40} color={colors.accent} />
           </View>
           <Text style={styles.title}>Centria is Locked</Text>
-          <Text style={styles.subtitle}>Use biometrics to access your vault</Text>
+          <Text style={styles.subtitle}>
+            {showPinPad ? 'Enter your 4-digit PIN' : 'Use biometrics to access your vault'}
+          </Text>
         </View>
 
-        {error && <Text style={styles.errorText}>{error}</Text>}
-
-        <TouchableOpacity 
-          style={styles.unlockBtn} 
-          onPress={authenticate}
-          disabled={isAuthenticating}
-        >
-          <Ionicons name="finger-print" size={24} color={colors.white} />
-          <Text style={styles.unlockBtnText}>
-            {isAuthenticating ? 'Authenticating...' : 'Try Again'}
-          </Text>
-        </TouchableOpacity>
+        {showPinPad ? (
+          <View style={styles.pinWrapper}>
+            <PinPad onComplete={handlePinComplete} error={error} />
+            {state.biometricsEnabled && (
+              <TouchableOpacity onPress={() => setShowPinPad(false)} style={styles.switchBtn}>
+                <Text style={styles.switchBtnText}>Use Biometrics</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View style={styles.bioWrapper}>
+            {error && <Text style={styles.errorText}>{error}</Text>}
+            <TouchableOpacity 
+              style={styles.unlockBtn} 
+              onPress={authenticate}
+              disabled={isAuthenticating}
+            >
+              <Ionicons name="finger-print" size={24} color={colors.white} />
+              <Text style={styles.unlockBtnText}>
+                {isAuthenticating ? 'Authenticating...' : 'Try Again'}
+              </Text>
+            </TouchableOpacity>
+            {state.appPin && (
+              <TouchableOpacity onPress={() => setShowPinPad(true)} style={styles.switchBtn}>
+                <Text style={styles.switchBtnText}>Use PIN</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -129,5 +166,23 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.negative,
     marginTop: spacing.md,
+  },
+  pinWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    gap: spacing.xl,
+  },
+  bioWrapper: {
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  switchBtn: {
+    marginTop: spacing.lg,
+    padding: spacing.sm,
+  },
+  switchBtnText: {
+    ...typography.caption,
+    color: colors.accent,
+    fontFamily: 'Inter_600SemiBold',
   },
 });

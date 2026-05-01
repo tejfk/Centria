@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, typography, spacing, radius } from '../../utils/theme';
 import { formatCurrency, getRelativeDate } from '../../utils/formatters';
 import { getCategoryIcon } from '../../utils/helpers';
-import { Expense } from '../../context/AppContext';
+import { Expense, useApp } from '../../context/AppContext';
 
 interface ExpenseRowProps {
   expense: Expense;
@@ -11,6 +11,7 @@ interface ExpenseRowProps {
 }
 
 export function ExpenseRow({ expense, onDelete }: ExpenseRowProps) {
+  const { state } = useApp();
   return (
     <TouchableOpacity
       style={styles.row}
@@ -26,7 +27,7 @@ export function ExpenseRow({ expense, onDelete }: ExpenseRowProps) {
         </Text>
         <Text style={styles.date}>{getRelativeDate(expense.date)}</Text>
       </View>
-      <Text style={styles.amount}>-{formatCurrency(expense.amount)}</Text>
+      <Text style={styles.amount}>-{formatCurrency(expense.amount, state.profile.currency)}</Text>
     </TouchableOpacity>
   );
 }

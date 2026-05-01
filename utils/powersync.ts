@@ -1,118 +1,82 @@
-import {
-  Schema,
-  Table,
-  Column,
-  ColumnType,
-  PowerSyncDatabase,
-  AbstractPowerSyncDatabase
-} from '@powersync/react-native';
-import { supabase } from './supabase';
-import { SQLWatchRegistration } from '@powersync/react-native';
+import * as SQLite from 'expo-sqlite';
 
-// 1. Define the Schema for the Local SQLite Database
-// This MUST match your Supabase tables
-export const CentriaSchema = new Schema([
-  new Table({
-    name: 'profiles',
-    columns: [
-      new Column({ name: 'name', type: ColumnType.TEXT }),
-      new Column({ name: 'currency', type: ColumnType.TEXT }),
-      new Column({ name: 'monthly_income', type: ColumnType.REAL }),
-      new Column({ name: 'created_at', type: ColumnType.TEXT }),
-    ],
-  }),
-  new Table({
-    name: 'expenses',
-    columns: [
-      new Column({ name: 'user_id', type: ColumnType.TEXT }),
-      new Column({ name: 'amount', type: ColumnType.REAL }),
-      new Column({ name: 'category', type: ColumnType.TEXT }),
-      new Column({ name: 'note', type: ColumnType.TEXT }),
-      new Column({ name: 'date', type: ColumnType.TEXT }),
-    ],
-  }),
-  new Table({
-    name: 'subscriptions',
-    columns: [
-      new Column({ name: 'user_id', type: ColumnType.TEXT }),
-      new Column({ name: 'name', type: ColumnType.TEXT }),
-      new Column({ name: 'price', type: ColumnType.REAL }),
-      new Column({ name: 'cycle', type: ColumnType.TEXT }),
-      new Column({ name: 'next_billing_date', type: ColumnType.TEXT }),
-      new Column({ name: 'icon', type: ColumnType.TEXT }),
-      new Column({ name: 'active', type: ColumnType.INTEGER }), // SQLite uses integers for boolean
-    ],
-  }),
-  new Table({
-    name: 'reminders',
-    columns: [
-      new Column({ name: 'user_id', type: ColumnType.TEXT }),
-      new Column({ name: 'title', type: ColumnType.TEXT }),
-      new Column({ name: 'date', type: ColumnType.TEXT }),
-      new Column({ name: 'type', type: ColumnType.TEXT }),
-      new Column({ name: 'completed', type: ColumnType.INTEGER }),
-      new Column({ name: 'linked_subscription_id', type: ColumnType.TEXT }),
-    ],
-  }),
-  new Table({
-    name: 'documents',
-    columns: [
-      new Column({ name: 'user_id', type: ColumnType.TEXT }),
-      new Column({ name: 'name', type: ColumnType.TEXT }),
-      new Column({ name: 'category', type: ColumnType.TEXT }),
-      new Column({ name: 'file_path', type: ColumnType.TEXT }),
-      new Column({ name: 'file_type', type: ColumnType.TEXT }),
-      new Column({ name: 'expiry_date', type: ColumnType.TEXT }),
-    ],
-  }),
-]);
+// Simple Custom Emitter
+class SimpleEmitter {
+  listeners: (() => void)[] = [];
+  on(listener: () => void) { this.listeners.push(listener); }
+  off(listener: () => void) { this.listeners = this.listeners.filter(l => l !== listener); }
+  emit() { this.listeners.forEach(l => l()); }
+}
+const tableEvents = new SimpleEmitter();
 
-import { SQLJSOpenFactory } from '@powersync/adapter-sql-js';
+let _db: SQLite.SQLiteDatabase | null = null;
 
-// 2. Initialize the PowerSync Database
-export const db = new PowerSyncDatabase({
-  schema: CentriaSchema,
-  database: new SQLJSOpenFactory({
-    dbFilename: 'centria_offline.db',
-  }),
-});
-
-// 3. Supabase Connector
-// This handles the authentication and the "Upload" of local changes to Supabase
-export class SupabaseConnector {
-  async fetchCredentials() {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error || !session) return null;
-
-    return {
-      endpoint: process.env.EXPO_PUBLIC_POWERSYNC_URL || '',
-      token: session.access_token,
-    };
-  }
-
-  async uploadData(database: AbstractPowerSyncDatabase) {
-    const transaction = await database.getNextCrudTransaction();
-    if (!transaction) return;
-
+const getDb = async () => {
+  if (_db) {
     try {
-      for (const op of transaction.crud) {
-        const table = op.table;
-        const data = op.opData;
-
-        if (op.op === 'PUT') {
-          await supabase.from(table).upsert({ id: op.id, ...data });
-        } else if (op.op === 'PATCH') {
-          await supabase.from(table).update(data).eq('id', op.id);
-        } else if (op.op === 'DELETE') {
-          await supabase.from(table).delete().eq('id', op.id);
-        }
-      }
-      await transaction.complete();
+      await _db.execAsync('SELECT 1');
+      return _db;
     } catch (e) {
-      console.error('Error uploading data to Supabase:', e);
-      throw e;
+      _db = null;
     }
   }
-}
+  _db = await SQLite.openDatabaseAsync('centria_sovereign.db');
+  
+  // Ensure tables exist
+  await _db.execAsync(`
+    CREATE TABLE IF NOT EXISTS profiles (id TEXT PRIMARY KEY, name TEXT, currency TEXT, monthly_income REAL, created_at TEXT);
+    CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, user_id TEXT, amount REAL, category TEXT, note TEXT, date TEXT);
+    CREATE TABLE IF NOT EXISTS subscriptions (id TEXT PRIMARY KEY, user_id TEXT, name TEXT, price REAL, cycle TEXT, next_billing_date TEXT, icon TEXT, active INTEGER);
+    CREATE TABLE IF NOT EXISTS reminders (id TEXT PRIMARY KEY, user_id TEXT, title TEXT, date TEXT, type TEXT, completed INTEGER, linked_subscription_id TEXT);
+    CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, user_id TEXT, name TEXT, category TEXT, file_path TEXT, file_type TEXT, expiry_date TEXT);
+  `);
+  
+  return _db;
+};
 
-export const connector = new SupabaseConnector();
+export const db = {
+  init: async () => {
+    await getDb();
+  },
+  execute: async (sql: string, params: any[] = []) => {
+    const database = await getDb();
+    // Using a transaction for safer writes and better connection handling
+    await database.withTransactionAsync(async () => {
+      await database.runAsync(sql, params);
+    });
+    tableEvents.emit();
+  },
+  getAll: async (sql: string, params: any[] = []) => {
+    const database = await getDb();
+    return await database.getAllAsync(sql, params);
+  },
+  watch: (sql: string, params: any[], options: { onResult: (result: any) => void }) => {
+    const runQuery = async () => {
+      try {
+        const database = await getDb();
+        const rows = await database.getAllAsync(sql, params);
+        options.onResult({
+          rows: {
+            length: rows.length,
+            item: (i: number) => rows[i],
+            _array: rows
+          }
+        });
+      } catch (e) {
+        console.warn('Watch Error:', e);
+      }
+    };
+    runQuery();
+    const listener = () => runQuery();
+    tableEvents.on(listener);
+    return { close: () => tableEvents.off(listener) };
+  },
+  connect: async () => {},
+  disconnectAndClear: async () => {
+    const database = await getDb();
+    await database.execAsync('DELETE FROM expenses; DELETE FROM subscriptions; DELETE FROM reminders; DELETE FROM documents;');
+    tableEvents.emit();
+  }
+};
+
+export const connector = {};

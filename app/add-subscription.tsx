@@ -7,7 +7,6 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { colors, typography, spacing } from '../utils/theme';
-import { supabase } from '../utils/supabase';
 import { db } from '../utils/powersync';
 import 'react-native-get-random-values';
 
@@ -27,14 +26,12 @@ export default function AddSubscription() {
     if (!name.trim() || !parsedPrice || parsedPrice <= 0) return;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
       const id = Math.random().toString(36).substring(2, 15);
+      const userId = 'local-user';
 
       await db.execute(
         'INSERT INTO subscriptions (id, user_id, name, price, cycle, next_billing_date, icon, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, user.id, name.trim(), parsedPrice, cycles[cycleIndex].toLowerCase(), new Date().toISOString(), icon, 1]
+        [id, userId, name.trim(), parsedPrice, cycles[cycleIndex].toLowerCase(), new Date().toISOString(), icon, 1]
       );
 
       router.back();

@@ -4,6 +4,7 @@ import { Card } from '../ui/Card';
 import { ProgressBar } from '../ui/ProgressBar';
 import { colors, typography, spacing } from '../../utils/theme';
 import { formatCurrency } from '../../utils/formatters';
+import { useApp } from '../../context/AppContext';
 
 interface BalanceCardProps {
   income: number;
@@ -12,6 +13,7 @@ interface BalanceCardProps {
 }
 
 export function BalanceCard({ income, totalExpenses, totalSubscriptions }: BalanceCardProps) {
+  const { state } = useApp();
   const totalSpent = totalExpenses + totalSubscriptions;
   const remaining = income - totalSpent;
   const progress = income > 0 ? Math.max(remaining / income, 0) : 0;
@@ -20,7 +22,7 @@ export function BalanceCard({ income, totalExpenses, totalSubscriptions }: Balan
     <Card style={styles.card} elevated>
       <Text style={styles.label}>Remaining Balance</Text>
       <Text style={[styles.amount, remaining < 0 && styles.amountNegative]}>
-        {formatCurrency(remaining)}
+        {formatCurrency(remaining, state.profile.currency)}
       </Text>
       <View style={styles.progressContainer}>
         <ProgressBar progress={progress} showLabel height={8} />

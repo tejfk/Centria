@@ -8,7 +8,6 @@ import { Button } from '../components/ui/Button';
 import { CategoryChip } from '../components/ui/CategoryChip';
 import { colors, typography, spacing, radius } from '../utils/theme';
 import { getCategoryIcon } from '../utils/helpers';
-import { supabase } from '../utils/supabase';
 import { db } from '../utils/powersync';
 import 'react-native-get-random-values';
 
@@ -35,14 +34,12 @@ export default function AddExpense() {
     if (!parsedAmount || parsedAmount <= 0) return;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
       const id = Math.random().toString(36).substring(2, 15); // Simple local ID
+      const userId = 'local-user';
 
       await db.execute(
         'INSERT INTO expenses (id, user_id, amount, category, note, date) VALUES (?, ?, ?, ?, ?, ?)',
-        [id, user.id, parsedAmount, category, note.trim(), new Date().toISOString()]
+        [id, userId, parsedAmount, category, note.trim(), new Date().toISOString()]
       );
 
       router.back();
